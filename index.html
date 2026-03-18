@@ -1,0 +1,1805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chemistry Hub — The Molecule Showdown</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+--bg-primary:#0D0D1A;--bg-secondary:#1A1A2E;--bg-tertiary:#16213E;--bg-surface:#0F3460;
+--water:#00B4D8;--water-light:#48CAE4;--water-dark:#0077B6;--water-glow:rgba(0,180,216,0.15);
+--methane:#F59E0B;--methane-light:#FBBF24;--methane-dark:#D97706;--methane-glow:rgba(245,158,11,0.15);
+--success:#10B981;--error:#EF4444;--purple:#7C3AED;--coral:#E76F51;
+--text-primary:#FFFFFF;--text-secondary:#F1F5F9;--text-muted:#94A3B8;--text-dim:#64748B;
+}
+html{scroll-behavior:smooth}
+body{
+font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',Roboto,sans-serif;
+background:var(--bg-primary);color:var(--text-secondary);line-height:1.7;
+overflow-x:hidden;min-height:100vh;
+}
+/* Animated background */
+body::before{
+content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+background:
+radial-gradient(ellipse 80% 60% at 20% 50%,rgba(0,180,216,0.04),transparent),
+radial-gradient(ellipse 60% 80% at 80% 30%,rgba(245,158,11,0.035),transparent),
+radial-gradient(ellipse 70% 50% at 50% 80%,rgba(124,58,237,0.03),transparent);
+animation:bgDrift 25s ease-in-out infinite alternate;
+}
+@keyframes bgDrift{0%{opacity:.8;transform:scale(1) translate(0,0)}50%{opacity:1;transform:scale(1.05) translate(-2%,1%)}100%{opacity:.8;transform:scale(1) translate(1%,-1%)}}
+
+/* Loading screen */
+#loading-screen{
+position:fixed;inset:0;z-index:10000;background:var(--bg-primary);
+display:flex;flex-direction:column;align-items:center;justify-content:center;
+transition:opacity .6s ease;
+}
+#loading-screen.hidden{opacity:0;pointer-events:none}
+#loading-text{
+font-family:'SF Mono','Fira Code','Cascadia Code',monospace;
+font-size:28px;color:var(--text-primary);letter-spacing:.05em;
+}
+#loading-cursor{display:inline-block;width:2px;height:28px;background:var(--water);margin-left:2px;animation:blink .6s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+#loading-sub{color:var(--text-muted);font-size:13px;margin-top:12px;opacity:0;transition:opacity .5s}
+
+/* Navbar */
+#navbar{
+position:fixed;top:0;left:0;right:0;height:64px;z-index:1000;
+background:rgba(13,13,26,0.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;padding:0 24px;
+}
+.nav-brand{display:flex;align-items:center;gap:10px;min-width:200px}
+.nav-brand svg{width:32px;height:32px}
+.nav-brand-text h1{font-size:18px;font-weight:700;color:#fff;line-height:1.2}
+.nav-brand-text span{font-size:11px;color:var(--text-muted);letter-spacing:.04em}
+.nav-tabs{display:flex;gap:6px;flex:1;justify-content:center;position:relative}
+.nav-tab{
+padding:8px 20px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;
+color:var(--text-muted);cursor:pointer;border:none;background:none;
+transition:color .3s;position:relative;font-weight:500;white-space:nowrap;
+}
+.nav-tab:hover,.nav-tab.active{color:#fff}
+.nav-tab .tab-icon{font-size:15px;margin-right:6px}
+#tab-indicator{
+position:absolute;bottom:0;height:3px;background:var(--water);border-radius:3px;
+transition:left .4s cubic-bezier(.4,0,.2,1),width .4s cubic-bezier(.4,0,.2,1);
+box-shadow:0 0 10px rgba(0,180,216,0.5);
+}
+.nav-right{min-width:200px;display:flex;justify-content:flex-end}
+.help-btn{
+width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);
+background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;
+transition:all .3s;display:flex;align-items:center;justify-content:center;
+}
+.help-btn:hover{color:#fff;border-color:rgba(255,255,255,0.3);background:rgba(255,255,255,0.05)}
+
+/* Main content */
+#app{position:relative;z-index:1;padding-top:64px;opacity:0;transition:opacity .8s ease}
+#app.visible{opacity:1}
+.tab-content{display:none;min-height:calc(100vh - 64px);animation:fadeIn .4s ease}
+.tab-content.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Glass card */
+.glass{
+background:rgba(22,33,62,0.7);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+border:1px solid rgba(255,255,255,0.08);border-radius:16px;
+box-shadow:0 8px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.glass-sm{
+background:rgba(22,33,62,0.5);backdrop-filter:blur(12px);
+border:1px solid rgba(255,255,255,0.06);border-radius:12px;
+box-shadow:0 4px 16px rgba(0,0,0,0.2);
+}
+
+/* Buttons */
+.btn{
+padding:12px 28px;border-radius:12px;font-weight:600;font-size:14px;
+letter-spacing:.02em;border:none;cursor:pointer;
+transition:all .3s cubic-bezier(.4,0,.2,1);display:inline-flex;align-items:center;gap:8px;
+}
+.btn:hover{transform:scale(1.05)}
+.btn:active{transform:scale(.97)}
+.btn-water{background:var(--water);color:#000;box-shadow:0 4px 15px rgba(0,180,216,0.3)}
+.btn-water:hover{box-shadow:0 0 20px rgba(0,180,216,0.4)}
+.btn-methane{background:var(--methane);color:#000;box-shadow:0 4px 15px rgba(245,158,11,0.3)}
+.btn-methane:hover{box-shadow:0 0 20px rgba(245,158,11,0.4)}
+.btn-outline{
+background:transparent;border:1px solid rgba(255,255,255,0.2);color:var(--text-secondary);
+}
+.btn-outline:hover{border-color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.05)}
+
+/* Toggle switch */
+.toggle-row{display:flex;align-items:center;gap:10px;padding:6px 0}
+.toggle-label{font-size:13px;color:var(--text-muted);min-width:90px;letter-spacing:.02em}
+.toggle{
+position:relative;width:44px;height:24px;border-radius:12px;
+background:#334155;cursor:pointer;transition:background .3s;flex-shrink:0;
+}
+.toggle.on{background:var(--water)}
+.toggle.on.methane-toggle{background:var(--methane)}
+.toggle .knob{
+position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;
+background:#fff;transition:transform .3s cubic-bezier(.4,0,.2,1);
+box-shadow:0 2px 4px rgba(0,0,0,0.3);
+}
+.toggle.on .knob{transform:translateX(20px)}
+.toggle.disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+
+/* ===== SECTION 1: 3D VIEWER ===== */
+#tab-3d{padding:20px}
+.viewer-split{display:grid;grid-template-columns:1fr 1fr;gap:2px;height:calc(100vh - 104px)}
+.viewer-half{display:flex;flex-direction:column;padding:16px;position:relative}
+.viewer-divider{width:1px;background:rgba(255,255,255,0.08)}
+.mol-title{font-size:22px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.mol-title.water{color:var(--water)}
+.mol-title.methane{color:var(--methane)}
+.canvas-wrap{
+flex:1;border-radius:12px;overflow:hidden;position:relative;min-height:280px;
+background:rgba(0,0,0,0.2);
+}
+.canvas-wrap canvas{width:100%!important;height:100%!important;cursor:grab}
+.canvas-wrap canvas:active{cursor:grabbing}
+.controls-panel{padding:14px 16px;margin-top:12px}
+.controls-grid{display:flex;flex-wrap:wrap;gap:6px 16px}
+.props-card{padding:16px;margin-top:12px;position:relative}
+.props-card.water-border{border-left:4px solid var(--water)}
+.props-card.methane-border{border-left:4px solid var(--methane)}
+.props-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-size:14px}
+.prop-label{color:var(--text-muted);font-size:13px}
+.prop-value{color:#fff;font-weight:600;font-family:'SF Mono','Fira Code',monospace;font-size:13px;text-align:right}
+.polar-badge{
+display:inline-block;padding:2px 10px;border-radius:6px;font-size:12px;font-weight:700;
+}
+.polar-badge.polar{background:rgba(0,180,216,0.2);color:var(--water);box-shadow:0 0 8px rgba(0,180,216,0.2)}
+.polar-badge.nonpolar{background:rgba(245,158,11,0.2);color:var(--methane)}
+
+/* ===== SECTION 2: BUILD LAB ===== */
+#tab-build{padding:20px}
+.build-layout{display:grid;grid-template-columns:180px 1fr 260px;gap:16px;height:calc(100vh - 160px)}
+.target-selector{display:flex;gap:12px;margin-bottom:16px;justify-content:center}
+.target-card{
+padding:14px 32px;border-radius:14px;cursor:pointer;font-weight:700;font-size:16px;
+border:2px solid transparent;transition:all .3s;
+}
+.target-card.water-target{background:rgba(0,180,216,0.1);color:var(--water);border-color:rgba(0,180,216,0.3)}
+.target-card.water-target.selected{border-color:var(--water);box-shadow:0 0 20px rgba(0,180,216,0.3);animation:pulse-glow-w 2s infinite}
+.target-card.methane-target{background:rgba(245,158,11,0.1);color:var(--methane);border-color:rgba(245,158,11,0.3)}
+.target-card.methane-target.selected{border-color:var(--methane);box-shadow:0 0 20px rgba(245,158,11,0.3);animation:pulse-glow-m 2s infinite}
+@keyframes pulse-glow-w{0%,100%{box-shadow:0 0 20px rgba(0,180,216,0.3)}50%{box-shadow:0 0 30px rgba(0,180,216,0.5)}}
+@keyframes pulse-glow-m{0%,100%{box-shadow:0 0 20px rgba(245,158,11,0.3)}50%{box-shadow:0 0 30px rgba(245,158,11,0.5)}}
+
+.atom-palette{padding:16px;display:flex;flex-direction:column;gap:14px}
+.palette-title{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:4px}
+.atom-chip{
+display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;
+border-radius:12px;cursor:grab;transition:all .3s;user-select:none;
+background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);
+}
+.atom-chip:hover{transform:scale(1.05);background:rgba(255,255,255,0.06)}
+.atom-circle{
+border-radius:50%;display:flex;align-items:center;justify-content:center;
+font-weight:700;flex-shrink:0;
+}
+.atom-circle.oxygen{width:52px;height:52px;background:#E74C3C;color:#fff;font-size:20px;box-shadow:0 0 15px rgba(231,76,60,0.3)}
+.atom-circle.hydrogen{width:38px;height:38px;background:#ECF0F1;color:#2C3E50;font-size:16px;box-shadow:0 0 10px rgba(236,240,241,0.2)}
+.atom-circle.carbon{width:48px;height:48px;background:#2C3E50;color:#fff;font-size:18px;box-shadow:0 0 12px rgba(44,62,80,0.3);border:1px solid rgba(255,255,255,0.1)}
+.atom-chip-label{font-size:11px;color:var(--text-dim)}
+
+.build-canvas{
+position:relative;border-radius:16px;overflow:hidden;
+background:#111122;border:2px dashed rgba(255,255,255,0.06);
+}
+.build-canvas.drag-over{border-color:rgba(0,180,216,0.4)}
+.build-grid{position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,255,255,0.04) 1px,transparent 1px);background-size:30px 30px}
+.build-actions{
+position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+display:flex;gap:8px;z-index:5;
+}
+.build-counter{
+position:absolute;top:12px;right:12px;font-size:12px;color:var(--text-dim);
+padding:6px 12px;border-radius:8px;background:rgba(0,0,0,0.3);
+}
+.canvas-atom{
+position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;
+font-weight:700;cursor:grab;transition:box-shadow .3s;z-index:2;
+transform:translate(-50%,-50%);
+}
+.canvas-atom:hover{z-index:3}
+.canvas-bond{position:absolute;z-index:1;pointer-events:none}
+.bond-dot{
+position:absolute;width:8px;height:8px;border-radius:50%;
+border:2px solid rgba(255,255,255,0.3);background:transparent;
+}
+.trash-zone{
+position:absolute;bottom:60px;right:16px;width:70px;height:70px;
+border:2px dashed rgba(239,68,68,0.3);border-radius:12px;
+display:flex;align-items:center;justify-content:center;
+font-size:24px;color:rgba(239,68,68,0.4);transition:all .3s;
+}
+.trash-zone.active{border-color:var(--error);color:var(--error);background:rgba(239,68,68,0.1)}
+
+.info-panel{padding:16px;overflow-y:auto}
+.info-panel h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:12px}
+.progress-bar{
+width:100%;height:8px;background:rgba(255,255,255,0.08);border-radius:4px;
+overflow:hidden;margin:8px 0 16px;
+}
+.progress-fill{height:100%;border-radius:4px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.progress-fill.water-fill{background:var(--water)}
+.progress-fill.methane-fill{background:var(--methane)}
+.atom-status{
+padding:10px 12px;border-radius:10px;margin-bottom:8px;
+background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);
+font-size:13px;
+}
+.atom-status-dots{display:flex;gap:4px;margin-top:4px}
+.atom-status-dot{width:10px;height:10px;border-radius:50%;border:2px solid rgba(255,255,255,0.3)}
+.atom-status-dot.filled{background:var(--water);border-color:var(--water)}
+.hint-box{
+padding:12px;border-radius:10px;font-size:13px;color:var(--water-light);
+background:rgba(0,180,216,0.08);border:1px solid rgba(0,180,216,0.15);margin-top:12px;
+}
+.completion-card{animation:fadeIn .5s ease}
+.completion-card h3{color:var(--success)!important;font-size:16px!important;text-transform:none!important;letter-spacing:normal!important}
+.fun-fact{
+padding:12px;border-radius:10px;font-size:13px;
+background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.2);
+color:var(--text-secondary);margin-top:12px;
+}
+
+/* Confetti */
+.confetti{position:absolute;width:8px;height:8px;border-radius:2px;pointer-events:none;z-index:100}
+
+/* ===== SECTION 3: COMPARE ===== */
+#tab-compare{padding:20px 20px 40px;max-width:1200px;margin:0 auto}
+#tab-compare h2{font-size:32px;font-weight:800;text-align:center;margin-bottom:8px;color:#fff}
+#tab-compare .section-sub{text-align:center;color:var(--text-muted);margin-bottom:32px;font-size:15px}
+
+.compare-table{width:100%;border-collapse:collapse;overflow:hidden;border-radius:16px}
+.compare-table th{
+padding:16px 20px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;
+color:var(--text-muted);font-weight:600;
+}
+.compare-table th:first-child{text-align:right;color:var(--water)}
+.compare-table th:last-child{text-align:left;color:var(--methane)}
+.compare-table th:nth-child(2){text-align:center}
+.compare-table td{padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:14px}
+.compare-table tr:nth-child(even) td{background:rgba(255,255,255,0.015)}
+.compare-table td:first-child{text-align:right;color:var(--water-light);font-weight:500;font-family:'SF Mono','Fira Code',monospace}
+.compare-table td:nth-child(2){text-align:center;color:var(--text-muted);font-weight:600}
+.compare-table td:last-child{text-align:left;color:var(--methane-light);font-weight:500;font-family:'SF Mono','Fira Code',monospace}
+.compare-row{opacity:0;transform:translateY(20px);transition:all .5s cubic-bezier(.4,0,.2,1)}
+.compare-row.visible{opacity:1;transform:translateY(0)}
+
+/* Temperature viz */
+.temp-section{margin-top:48px}
+.temp-section h3{font-size:24px;font-weight:700;text-align:center;margin-bottom:24px;color:#fff}
+.temp-layout{display:grid;grid-template-columns:200px 1fr;gap:32px;align-items:start}
+.thermometer{
+position:relative;width:60px;height:400px;margin:0 auto;
+background:rgba(255,255,255,0.05);border-radius:30px;border:2px solid rgba(255,255,255,0.1);
+overflow:visible;
+}
+.thermo-fill{
+position:absolute;bottom:0;left:4px;right:4px;border-radius:0 0 26px 26px;
+transition:height .15s,background .3s;
+}
+.thermo-scale{position:absolute;left:72px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:space-between}
+.thermo-mark{font-size:11px;color:var(--text-dim);white-space:nowrap;position:relative}
+.thermo-mark::before{content:'';position:absolute;left:-16px;top:50%;width:10px;height:1px;background:rgba(255,255,255,0.15)}
+.thermo-handle{
+position:absolute;left:50%;transform:translateX(-50%);width:54px;height:24px;
+background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.4);
+border-radius:12px;cursor:grab;z-index:5;
+display:flex;align-items:center;justify-content:center;
+}
+.thermo-handle:active{cursor:grabbing}
+.thermo-handle::after{content:'';width:20px;height:3px;background:rgba(255,255,255,0.5);border-radius:2px}
+.thermo-temp{
+position:absolute;left:140px;font-size:28px;font-weight:800;color:#fff;
+white-space:nowrap;transform:translateY(-50%);
+font-family:'SF Mono','Fira Code',monospace;
+}
+.thermo-fun-label{
+position:absolute;left:140px;top:28px;font-size:12px;color:var(--text-muted);
+white-space:nowrap;
+}
+.temp-key-marks{position:absolute;left:-4px;right:-4px}
+.temp-key-mark{
+position:absolute;left:0;right:0;height:2px;
+}
+
+.particle-boxes{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.particle-box{
+height:400px;border-radius:16px;position:relative;overflow:hidden;
+background:rgba(0,0,0,0.3);
+}
+.particle-box.water-box{border:2px solid rgba(0,180,216,0.3)}
+.particle-box.methane-box{border:2px solid rgba(245,158,11,0.3)}
+.particle-box-label{
+position:absolute;top:12px;left:50%;transform:translateX(-50%);
+font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;z-index:2;
+}
+.particle-box-label.water-label{color:var(--water)}
+.particle-box-label.methane-label{color:var(--methane)}
+.state-label{
+position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+font-size:20px;font-weight:700;letter-spacing:.04em;z-index:2;
+padding:6px 16px;border-radius:8px;background:rgba(0,0,0,0.4);
+}
+.particle{position:absolute;border-radius:50%;z-index:1}
+
+/* Flowchart */
+.flow-section{margin-top:48px}
+.flow-section h3{font-size:24px;font-weight:700;text-align:center;margin-bottom:24px;color:#fff}
+.flow-track{display:flex;align-items:center;gap:0;margin-bottom:16px;overflow-x:auto;padding:12px 0}
+.flow-node{
+padding:14px 18px;border-radius:12px;min-width:140px;text-align:center;cursor:pointer;
+transition:all .3s;flex-shrink:0;position:relative;
+}
+.flow-node:hover{transform:translateY(-3px)}
+.flow-node .node-cat{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:4px}
+.flow-node .node-val{font-size:14px;font-weight:600;color:#fff}
+.flow-node.water-node{border:1px solid rgba(0,180,216,0.2);background:rgba(0,180,216,0.08)}
+.flow-node.water-node:hover{border-color:var(--water);box-shadow:0 0 15px rgba(0,180,216,0.2)}
+.flow-node.methane-node{border:1px solid rgba(245,158,11,0.2);background:rgba(245,158,11,0.08)}
+.flow-node.methane-node:hover{border-color:var(--methane);box-shadow:0 0 15px rgba(245,158,11,0.2)}
+.flow-arrow{color:var(--text-dim);font-size:20px;padding:0 4px;flex-shrink:0}
+.flow-tooltip{
+position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);
+width:240px;padding:12px;border-radius:10px;font-size:13px;color:var(--text-secondary);
+background:rgba(15,15,30,0.95);border:1px solid rgba(255,255,255,0.1);
+box-shadow:0 8px 24px rgba(0,0,0,0.5);display:none;z-index:10;line-height:1.5;
+}
+.flow-node:hover .flow-tooltip{display:block}
+.flow-diverge{
+text-align:center;padding:8px 16px;font-size:13px;color:var(--purple);
+border:1px dashed rgba(124,58,237,0.3);border-radius:8px;margin:8px auto;
+max-width:300px;
+}
+
+/* ===== SECTION 4: LEARN ===== */
+#tab-learn{padding:20px;max-width:800px;margin:0 auto}
+#tab-learn h2{font-size:32px;font-weight:800;text-align:center;margin-bottom:24px;color:#fff}
+.accordion{margin-bottom:12px;overflow:hidden}
+.accordion-header{
+padding:18px 20px;cursor:pointer;display:flex;align-items:center;gap:12px;
+transition:background .3s;font-size:16px;font-weight:600;color:var(--text-primary);
+}
+.accordion-header:hover{background:rgba(255,255,255,0.03)}
+.accordion-chevron{transition:transform .3s;font-size:12px;color:var(--text-muted)}
+.accordion.open .accordion-chevron{transform:rotate(90deg)}
+.accordion-body{max-height:0;overflow:hidden;transition:max-height .5s cubic-bezier(.4,0,.2,1)}
+.accordion.open .accordion-body{max-height:1200px}
+.accordion-content{padding:0 20px 20px;font-size:15px;line-height:1.8;color:var(--text-secondary)}
+.accordion-content p{margin-bottom:12px}
+
+.shape-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.shape-card{
+padding:16px;border-radius:12px;text-align:center;
+background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);
+transition:all .3s;
+}
+.shape-card:hover{transform:translateY(-2px)}
+.shape-card h4{font-size:14px;margin-bottom:8px;color:var(--text-primary)}
+.shape-card p{font-size:13px;color:var(--text-muted)}
+
+.imf-bars{margin-top:16px}
+.imf-bar-row{display:flex;align-items:center;gap:12px;margin-bottom:10px;font-size:13px}
+.imf-bar-label{min-width:160px;color:var(--text-muted)}
+.imf-bar-track{flex:1;height:20px;background:rgba(255,255,255,0.05);border-radius:10px;overflow:hidden}
+.imf-bar-fill{height:100%;border-radius:10px;transition:width 1s cubic-bezier(.4,0,.2,1)}
+.imf-bar-fill.water-fill{background:var(--water)}
+.imf-bar-fill.methane-fill{background:var(--methane)}
+.imf-strength{font-size:12px;color:var(--text-dim);min-width:50px}
+
+.fact-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.fact-card{
+padding:16px;border-radius:12px;font-size:14px;line-height:1.6;
+background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);
+transition:all .3s;cursor:default;
+}
+.fact-card:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(0,0,0,0.3)}
+.fact-icon{font-size:24px;margin-bottom:8px;display:block}
+
+/* Footer */
+#footer{
+background:rgba(13,13,26,0.9);border-top:1px solid rgba(255,255,255,0.05);
+padding:20px 40px;display:grid;grid-template-columns:1fr 1fr 1fr;
+align-items:center;font-size:12px;color:var(--text-dim);max-height:80px;
+}
+#footer div:nth-child(2){text-align:center}
+#footer div:nth-child(3){text-align:right}
+
+/* Help modal */
+.modal-overlay{
+position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;
+display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);
+}
+.modal-overlay.open{display:flex}
+.modal{padding:32px;max-width:480px;width:90%}
+.modal h3{font-size:20px;color:#fff;margin-bottom:16px}
+.modal table{width:100%;font-size:14px}
+.modal td{padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.modal td:first-child{color:var(--text-muted)}
+.modal td:last-child{text-align:right;color:#fff;font-family:'SF Mono','Fira Code',monospace}
+.modal-close{
+position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:50%;
+border:none;background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:16px;
+}
+
+/* Responsive */
+@media(max-width:1024px){
+.viewer-split{grid-template-columns:1fr;height:auto}
+.viewer-half{min-height:500px}
+.build-layout{grid-template-columns:120px 1fr 200px}
+.temp-layout{grid-template-columns:180px 1fr}
+}
+@media(max-width:768px){
+.nav-tabs{gap:2px}
+.nav-tab{padding:6px 10px;font-size:11px}
+.nav-tab .tab-icon{display:none}
+.build-layout{grid-template-columns:1fr;height:auto}
+.atom-palette{flex-direction:row;flex-wrap:wrap}
+.build-canvas{min-height:400px}
+.temp-layout{grid-template-columns:1fr;gap:24px}
+.thermometer{height:300px}
+.particle-boxes{grid-template-columns:1fr}
+.particle-box{height:250px}
+.flow-track{flex-wrap:nowrap;overflow-x:auto}
+.shape-cards,.fact-grid{grid-template-columns:1fr}
+#footer{grid-template-columns:1fr;text-align:center;gap:4px;max-height:none}
+#footer div{text-align:center!important}
+}
+
+/* Reduced motion */
+@media(prefers-reduced-motion:reduce){
+*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div id="loading-screen">
+<div id="loading-text"><span id="loading-typed"></span><span id="loading-cursor"></span></div>
+<div id="loading-sub">The Molecule Showdown</div>
+</div>
+
+<!-- Help Modal -->
+<div class="modal-overlay" id="help-modal">
+<div class="modal glass" style="position:relative">
+<button class="modal-close" onclick="document.getElementById('help-modal').classList.remove('open')">&times;</button>
+<h3>Keyboard Shortcuts</h3>
+<table>
+<tr><td>Switch to 3D Viewer</td><td>1</td></tr>
+<tr><td>Switch to Build Lab</td><td>2</td></tr>
+<tr><td>Switch to Compare</td><td>3</td></tr>
+<tr><td>Switch to Learn</td><td>4</td></tr>
+<tr><td>Reset Build Canvas</td><td>R</td></tr>
+<tr><td>Pause Animations</td><td>Space</td></tr>
+</table>
+</div>
+</div>
+
+<!-- Navbar -->
+<nav id="navbar">
+<div class="nav-brand">
+<svg viewBox="0 0 32 32" fill="none"><ellipse cx="16" cy="16" rx="14" ry="6" stroke="var(--water)" stroke-width="1.5" transform="rotate(0 16 16)"/><ellipse cx="16" cy="16" rx="14" ry="6" stroke="var(--methane)" stroke-width="1.5" transform="rotate(60 16 16)"/><ellipse cx="16" cy="16" rx="14" ry="6" stroke="var(--purple)" stroke-width="1.5" transform="rotate(120 16 16)"/><circle cx="16" cy="16" r="3" fill="var(--water)"/></svg>
+<div class="nav-brand-text"><h1>Chemistry Hub</h1><span>The Molecule Showdown</span></div>
+</div>
+<div class="nav-tabs" id="nav-tabs">
+<button class="nav-tab active" data-tab="tab-3d" onclick="switchTab('tab-3d',this)"><span class="tab-icon">⬡</span>3D Viewer</button>
+<button class="nav-tab" data-tab="tab-build" onclick="switchTab('tab-build',this)"><span class="tab-icon">🔧</span>Build Lab</button>
+<button class="nav-tab" data-tab="tab-compare" onclick="switchTab('tab-compare',this)"><span class="tab-icon">⚖</span>Compare</button>
+<button class="nav-tab" data-tab="tab-learn" onclick="switchTab('tab-learn',this)"><span class="tab-icon">📖</span>Learn</button>
+<div id="tab-indicator"></div>
+</div>
+<div class="nav-right">
+<button class="help-btn" onclick="document.getElementById('help-modal').classList.toggle('open')" aria-label="Help and keyboard shortcuts">?</button>
+</div>
+</nav>
+
+<!-- App -->
+<div id="app">
+
+<!-- Tab 1: 3D Viewer -->
+<div class="tab-content active" id="tab-3d">
+<div class="viewer-split">
+<div class="viewer-half">
+<div class="mol-title water">💧 Water — H₂O</div>
+<div class="canvas-wrap" id="water-canvas" aria-label="Interactive 3D model of Water H2O. Click and drag to rotate."></div>
+<div class="controls-panel glass-sm">
+<div class="controls-grid">
+<div class="toggle-row"><span class="toggle-label">Lone Pairs</span><div class="toggle" id="toggle-w-lp" onclick="toggleFeature('water','lonePairs',this)" aria-label="Toggle lone pairs for water"><div class="knob"></div></div></div>
+<div class="toggle-row"><span class="toggle-label">Bond Dipoles</span><div class="toggle" id="toggle-w-bd" onclick="toggleFeature('water','bondDipoles',this)" aria-label="Toggle bond dipoles for water"><div class="knob"></div></div></div>
+<div class="toggle-row"><span class="toggle-label">Net Dipole</span><div class="toggle" id="toggle-w-nd" onclick="toggleFeature('water','netDipole',this)" aria-label="Toggle net dipole for water"><div class="knob"></div></div></div>
+<div class="toggle-row"><span class="toggle-label">Labels</span><div class="toggle" id="toggle-w-lb" onclick="toggleFeature('water','labels',this)" aria-label="Toggle labels for water"><div class="knob"></div></div></div>
+<div class="toggle-row"><span class="toggle-label">Vibration</span><div class="toggle on" id="toggle-w-vb" onclick="toggleFeature('water','vibration',this)" aria-label="Toggle vibration for water"><div class="knob"></div></div></div>
+<div class="toggle-row"><span class="toggle-label">Spin</span><div class="toggle on" id="toggle-w-sp" onclick="toggleFeature('water','spin',this)" aria-label="Toggle spin for water"><div class="knob"></div></div></div>
+</div>
+</div>
+<div class="props-card glass-sm water-border">
+<div class="props-grid">
+<span class="prop-label">Formula</span><span class="prop-value">H₂O</span>
+<span class="prop-label">Bonds</span><span class="prop-value">2 × O–H (covalent)</span>
+<span class="prop-label">Lone Pairs</span><span class="prop-value">2 (on oxygen)</span>
+<span class="prop-label">E⁻ Geometry</span><span class="prop-value">Tetrahedral</span>
+<span class="prop-label">Mol. Geometry</span><span class="prop-value">Bent</span>
+<span class="prop-label">Bond Angle</span><span class="prop-value">104.5°</span>
+<span class="prop-label">Polarity</span><span class="prop-value"><span class="polar-badge polar">POLAR</span></span>
+<span class="prop-label">Primary IMF</span><span class="prop-value">Hydrogen Bonding</span>
+<span class="prop-label">Boiling Point</span><span class="prop-value">100 °C</span>
+<span class="prop-label">State (25°C)</span><span class="prop-value">Liquid 💧</span>
+</div>
+</div>
+</div>
+
+<div class="viewer-half">
+<div class="mol-title methane">🔥 Methane — CH₄</div>
+<div class="canvas-wrap" id="methane-canvas" aria-label="Interactive 3D model of Methane CH4. Click and drag to rotate."></div>
+<div class="controls-panel glass-sm">
+<div class="controls-grid">
+<div class="toggle-row"><span class="toggle-label">Lone Pairs</span><div class="toggle disabled" aria-label="Lone pairs not available for methane"><div class="knob"></div></div></div>
+<div class="toggle-row"><span class="toggle-label">Bond Dipoles</span><div class="toggle methane-toggle" id="toggle-m-bd" onclick="toggleFeature('methane','bondDipoles',this)" aria-label="Toggle bond dipoles for methane"><div class="knob"></div></div></div>
+<div class="toggle-row"><span class="toggle-label">Net Dipole</span><div class="toggle methane-toggle" id="toggle-m-nd" onclick="toggleFeature('methane','netDipole',this)" aria-label="Toggle net dipole for methane"><div class="knob"></div></div></div>
+<div class="toggle-row"><span class="toggle-label">Labels</span><div class="toggle methane-toggle" id="toggle-m-lb" onclick="toggleFeature('methane','labels',this)" aria-label="Toggle labels for methane"><div class="knob"></div></div></div>
+<div class="toggle-row"><span class="toggle-label">Vibration</span><div class="toggle on methane-toggle" id="toggle-m-vb" onclick="toggleFeature('methane','vibration',this)" aria-label="Toggle vibration for methane"><div class="knob"></div></div></div>
+<div class="toggle-row"><span class="toggle-label">Spin</span><div class="toggle on methane-toggle" id="toggle-m-sp" onclick="toggleFeature('methane','spin',this)" aria-label="Toggle spin for methane"><div class="knob"></div></div></div>
+</div>
+</div>
+<div class="props-card glass-sm methane-border">
+<div class="props-grid">
+<span class="prop-label">Formula</span><span class="prop-value">CH₄</span>
+<span class="prop-label">Bonds</span><span class="prop-value">4 × C–H (covalent)</span>
+<span class="prop-label">Lone Pairs</span><span class="prop-value">0</span>
+<span class="prop-label">E⁻ Geometry</span><span class="prop-value">Tetrahedral</span>
+<span class="prop-label">Mol. Geometry</span><span class="prop-value">Tetrahedral</span>
+<span class="prop-label">Bond Angle</span><span class="prop-value">109.5°</span>
+<span class="prop-label">Polarity</span><span class="prop-value"><span class="polar-badge nonpolar">NON-POLAR</span></span>
+<span class="prop-label">Primary IMF</span><span class="prop-value">London Dispersion</span>
+<span class="prop-label">Boiling Point</span><span class="prop-value">−162 °C</span>
+<span class="prop-label">State (25°C)</span><span class="prop-value">Gas 💨</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Tab 2: Build Lab -->
+<div class="tab-content" id="tab-build">
+<div class="target-selector">
+<div class="target-card water-target selected" onclick="selectTarget('H2O')">Build H₂O</div>
+<div class="target-card methane-target" onclick="selectTarget('CH4')">Build CH₄</div>
+</div>
+<div class="build-layout">
+<div class="atom-palette glass">
+<div class="palette-title">Atom Palette</div>
+<div class="atom-chip" draggable="true" data-atom="O">
+<div class="atom-circle oxygen">O</div>
+<div class="atom-chip-label">6 valence e⁻</div>
+</div>
+<div class="atom-chip" draggable="true" data-atom="H">
+<div class="atom-circle hydrogen">H</div>
+<div class="atom-chip-label">1 valence e⁻</div>
+</div>
+<div class="atom-chip" draggable="true" data-atom="C">
+<div class="atom-circle carbon">C</div>
+<div class="atom-chip-label">4 valence e⁻</div>
+</div>
+</div>
+<div class="build-canvas" id="build-canvas">
+<div class="build-grid"></div>
+<div class="trash-zone" id="trash-zone">🗑</div>
+<div class="build-counter" id="build-counter">Molecules built: 0</div>
+<div class="build-actions">
+<button class="btn btn-outline" onclick="undoBuild()" style="font-size:13px;padding:8px 18px">↩ Undo</button>
+<button class="btn btn-outline" onclick="resetBuild()" style="font-size:13px;padding:8px 18px">🔄 Reset</button>
+</div>
+</div>
+<div class="info-panel glass" id="build-info">
+<h3>Build Progress</h3>
+<div id="build-info-content">
+<p style="color:var(--text-muted);font-size:14px;margin-top:8px">Target: <strong style="color:var(--water)">H₂O</strong></p>
+<div class="progress-bar"><div class="progress-fill water-fill" id="build-progress" style="width:0%"></div></div>
+<p style="font-size:13px;color:var(--text-muted)">Atoms: <span id="atom-count">0</span> / <span id="atom-total">3</span></p>
+<p style="font-size:13px;color:var(--text-muted)">Bonds: <span id="bond-count">0</span> / <span id="bond-total">2</span></p>
+<div id="atom-statuses"></div>
+<div class="hint-box" id="build-hint">Start by placing the central atom!</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Tab 3: Compare -->
+<div class="tab-content" id="tab-compare">
+<h2>Side-by-Side Comparison</h2>
+<p class="section-sub">How structure determines everything</p>
+
+<div class="glass" style="padding:4px;overflow:hidden;border-radius:16px">
+<table class="compare-table">
+<thead><tr><th>H₂O 💧</th><th>Property</th><th>CH₄ 🔥</th></tr></thead>
+<tbody>
+<tr class="compare-row"><td>2 × O–H</td><td>Covalent Bonds</td><td>4 × C–H</td></tr>
+<tr class="compare-row"><td>2 (on oxygen)</td><td>Lone Pairs</td><td>0</td></tr>
+<tr class="compare-row"><td>Tetrahedral</td><td>Electron Geometry</td><td>Tetrahedral</td></tr>
+<tr class="compare-row"><td>Bent (V-shape)</td><td>Molecular Geometry</td><td>Tetrahedral</td></tr>
+<tr class="compare-row"><td>104.5°</td><td>Bond Angle</td><td>109.5°</td></tr>
+<tr class="compare-row"><td style="color:var(--water)">✅ POLAR</td><td>Polarity</td><td style="color:var(--methane)">❌ Non-polar</td></tr>
+<tr class="compare-row"><td>Hydrogen bonding</td><td>Dominant IMF</td><td>London dispersion</td></tr>
+<tr class="compare-row"><td>100 °C</td><td>Boiling Point</td><td>−162 °C</td></tr>
+<tr class="compare-row"><td>Liquid 💧</td><td>State at 25 °C</td><td>Gas 💨</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- Temperature Visualizer -->
+<div class="temp-section">
+<h3>🌡️ Temperature & State Explorer</h3>
+<div class="temp-layout">
+<div style="position:relative">
+<div class="thermometer" id="thermometer">
+<div class="thermo-fill" id="thermo-fill"></div>
+<div class="thermo-handle" id="thermo-handle"></div>
+</div>
+<div class="thermo-temp" id="thermo-temp-display">25 °C</div>
+<div class="thermo-fun-label" id="thermo-fun-label">🌡️ Room temperature</div>
+</div>
+<div class="particle-boxes">
+<div class="particle-box water-box" id="water-particles">
+<div class="particle-box-label water-label">H₂O</div>
+<div class="state-label" id="water-state" style="color:var(--water)">LIQUID 💧</div>
+</div>
+<div class="particle-box methane-box" id="methane-particles">
+<div class="particle-box-label methane-label">CH₄</div>
+<div class="state-label" id="methane-state" style="color:var(--methane)">GAS 💨</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Flowchart -->
+<div class="flow-section">
+<h3>🔗 Structure → Properties Chain</h3>
+<div style="overflow-x:auto">
+<div class="flow-track" id="flow-water">
+<div class="flow-node water-node"><div class="node-cat">Atoms</div><div class="node-val">O + 2H</div><div class="flow-tooltip">Oxygen needs 2 more electrons; each hydrogen needs 1. They share!</div></div>
+<div class="flow-arrow">→</div>
+<div class="flow-node water-node"><div class="node-cat">Bonds</div><div class="node-val">2 O–H + 2 LP</div><div class="flow-tooltip">Two bonding pairs + two lone pairs = four electron groups total.</div></div>
+<div class="flow-arrow">→</div>
+<div class="flow-node water-node"><div class="node-cat">Shape</div><div class="node-val">Bent (104.5°)</div><div class="flow-tooltip">VSEPR pushes 4 groups into a tetrahedron, but only 2 are visible → bent shape.</div></div>
+<div class="flow-arrow">→</div>
+<div class="flow-node water-node"><div class="node-cat">Polarity</div><div class="node-val">POLAR</div><div class="flow-tooltip">Bent shape + electronegative O = unbalanced dipoles = polar molecule.</div></div>
+<div class="flow-arrow">→</div>
+<div class="flow-node water-node"><div class="node-cat">IMF</div><div class="node-val">H-bonds</div><div class="flow-tooltip">Polar H bonded to electronegative O → strong hydrogen bonds between molecules.</div></div>
+<div class="flow-arrow">→</div>
+<div class="flow-node water-node"><div class="node-cat">Properties</div><div class="node-val">bp 100°C, liquid</div><div class="flow-tooltip">Strong IMFs mean lots of energy needed to separate molecules → high boiling point.</div></div>
+</div>
+</div>
+<div class="flow-diverge">↕ This is where they split! Lone pairs change the shape.</div>
+<div style="overflow-x:auto">
+<div class="flow-track" id="flow-methane">
+<div class="flow-node methane-node"><div class="node-cat">Atoms</div><div class="node-val">C + 4H</div><div class="flow-tooltip">Carbon needs 4 more electrons; each hydrogen needs 1. They share!</div></div>
+<div class="flow-arrow">→</div>
+<div class="flow-node methane-node"><div class="node-cat">Bonds</div><div class="node-val">4 C–H + 0 LP</div><div class="flow-tooltip">Four bonding pairs + zero lone pairs = four electron groups, all bonds.</div></div>
+<div class="flow-arrow">→</div>
+<div class="flow-node methane-node"><div class="node-cat">Shape</div><div class="node-val">Tetrahedral (109.5°)</div><div class="flow-tooltip">With no lone pairs, all 4 groups are bonds → perfect tetrahedral shape.</div></div>
+<div class="flow-arrow">→</div>
+<div class="flow-node methane-node"><div class="node-cat">Polarity</div><div class="node-val">NON-POLAR</div><div class="flow-tooltip">Symmetric tetrahedral shape → dipoles cancel perfectly = non-polar.</div></div>
+<div class="flow-arrow">→</div>
+<div class="flow-node methane-node"><div class="node-cat">IMF</div><div class="node-val">LDF</div><div class="flow-tooltip">Non-polar molecules only have London dispersion forces — the weakest IMF.</div></div>
+<div class="flow-arrow">→</div>
+<div class="flow-node methane-node"><div class="node-cat">Properties</div><div class="node-val">bp −162°C, gas</div><div class="flow-tooltip">Weak IMFs mean little energy needed to separate → very low boiling point.</div></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Tab 4: Learn -->
+<div class="tab-content" id="tab-learn">
+<h2>Interactive Reference Guide</h2>
+
+<div class="accordion glass open" style="border-left:4px solid #3B82F6" data-section="1">
+<div class="accordion-header" onclick="toggleAccordion(this.parentElement)">
+<span class="accordion-chevron">▶</span> What is a Covalent Bond?
+</div>
+<div class="accordion-body">
+<div class="accordion-content">
+<p>A <strong>covalent bond</strong> forms when two non-metal atoms share a pair of valence electrons. Each atom contributes one electron to the shared pair. The goal is to achieve a stable electron configuration — typically 8 electrons (an octet) in the outer shell, or 2 (a duet) for hydrogen.</p>
+<p>Electrons that aren't shared become <strong>lone pairs</strong>, which still influence the molecule's shape even though they're not bonds.</p>
+<svg width="100%" height="120" viewBox="0 0 400 120" style="margin-top:12px">
+<circle cx="140" cy="60" r="45" fill="none" stroke="var(--water)" stroke-width="2" opacity="0.6"/>
+<circle cx="260" cy="60" r="45" fill="none" stroke="var(--methane)" stroke-width="2" opacity="0.6"/>
+<circle cx="192" cy="50" r="4" fill="#fff"/>
+<circle cx="208" cy="70" r="4" fill="#fff"/>
+<text x="120" y="64" fill="var(--water)" font-size="18" font-weight="bold" text-anchor="middle">O</text>
+<text x="280" y="64" fill="var(--methane)" font-size="18" font-weight="bold" text-anchor="middle">H</text>
+<text x="200" y="105" fill="var(--text-muted)" font-size="12" text-anchor="middle">Shared pair = covalent bond</text>
+</svg>
+</div>
+</div>
+</div>
+
+<div class="accordion glass" style="border-left:4px solid #8B5CF6" data-section="2">
+<div class="accordion-header" onclick="toggleAccordion(this.parentElement)">
+<span class="accordion-chevron">▶</span> VSEPR Theory
+</div>
+<div class="accordion-body">
+<div class="accordion-content">
+<p><strong>VSEPR</strong> (Valence Shell Electron Pair Repulsion) predicts molecular shape. Electron groups — both bonding pairs and lone pairs — repel each other and arrange to maximize distance.</p>
+<p>Four groups → tetrahedral arrangement. But the <em>molecular</em> shape depends on how many of those groups are lone pairs vs. bonding pairs.</p>
+<div class="shape-cards">
+<div class="shape-card" style="border-top:3px solid var(--methane)">
+<h4>4 groups, 0 lone pairs</h4>
+<svg width="100" height="80" viewBox="0 0 100 80"><circle cx="50" cy="35" r="12" fill="#2C3E50" stroke="rgba(255,255,255,0.2)" stroke-width="1"/><circle cx="25" cy="65" r="8" fill="#ECF0F1"/><circle cx="75" cy="65" r="8" fill="#ECF0F1"/><circle cx="35" cy="15" r="8" fill="#ECF0F1"/><circle cx="65" cy="15" r="8" fill="#ECF0F1"/><line x1="50" y1="35" x2="25" y2="65" stroke="#7F8C8D" stroke-width="2"/><line x1="50" y1="35" x2="75" y2="65" stroke="#7F8C8D" stroke-width="2"/><line x1="50" y1="35" x2="35" y2="15" stroke="#7F8C8D" stroke-width="2"/><line x1="50" y1="35" x2="65" y2="15" stroke="#7F8C8D" stroke-width="2"/></svg>
+<p>Tetrahedral (CH₄)</p>
+</div>
+<div class="shape-card" style="border-top:3px solid var(--water)">
+<h4>4 groups, 2 lone pairs</h4>
+<svg width="100" height="80" viewBox="0 0 100 80"><circle cx="50" cy="45" r="12" fill="#E74C3C" stroke="rgba(255,255,255,0.2)" stroke-width="1"/><circle cx="25" cy="70" r="8" fill="#ECF0F1"/><circle cx="75" cy="70" r="8" fill="#ECF0F1"/><line x1="50" y1="45" x2="25" y2="70" stroke="#7F8C8D" stroke-width="2"/><line x1="50" y1="45" x2="75" y2="70" stroke="#7F8C8D" stroke-width="2"/><ellipse cx="40" cy="22" rx="8" ry="14" fill="rgba(59,130,246,0.2)" stroke="rgba(59,130,246,0.4)" stroke-width="1" transform="rotate(-20 40 22)"/><ellipse cx="60" cy="22" rx="8" ry="14" fill="rgba(59,130,246,0.2)" stroke="rgba(59,130,246,0.4)" stroke-width="1" transform="rotate(20 60 22)"/></svg>
+<p>Bent (H₂O)</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="accordion glass" style="border-left:4px solid #EC4899" data-section="3">
+<div class="accordion-header" onclick="toggleAccordion(this.parentElement)">
+<span class="accordion-chevron">▶</span> Polarity
+</div>
+<div class="accordion-body">
+<div class="accordion-content">
+<p>A <strong>polar molecule</strong> has an uneven distribution of charge. This happens when (1) the bonds are polar (atoms have different electronegativities) AND (2) the molecular shape is asymmetric, so the dipoles don't cancel.</p>
+<p><strong>Water</strong> is polar — bent shape means dipoles don't cancel. <strong>Methane</strong> is non-polar — symmetric tetrahedral shape means dipoles cancel perfectly.</p>
+</div>
+</div>
+</div>
+
+<div class="accordion glass" style="border-left:4px solid #10B981" data-section="4">
+<div class="accordion-header" onclick="toggleAccordion(this.parentElement)">
+<span class="accordion-chevron">▶</span> Intermolecular Forces
+</div>
+<div class="accordion-body">
+<div class="accordion-content">
+<p>IMFs are attractions <strong>between</strong> molecules (not within). Strength order: London dispersion (weakest) &lt; dipole-dipole &lt; hydrogen bonding (strongest for small molecules).</p>
+<p>Water has <strong>hydrogen bonding</strong> (strong) → bp 100°C. Methane only has <strong>London dispersion forces</strong> (weak) → bp −162°C.</p>
+<div class="imf-bars">
+<div class="imf-bar-row"><span class="imf-bar-label" style="color:var(--methane)">London Dispersion (CH₄)</span><div class="imf-bar-track"><div class="imf-bar-fill methane-fill" id="imf-bar-ldf" style="width:0%"></div></div><span class="imf-strength">Weak</span></div>
+<div class="imf-bar-row"><span class="imf-bar-label" style="color:var(--water)">Hydrogen Bonding (H₂O)</span><div class="imf-bar-track"><div class="imf-bar-fill water-fill" id="imf-bar-hb" style="width:0%"></div></div><span class="imf-strength">Strong</span></div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="accordion glass" style="border-left:4px solid #F59E0B" data-section="5">
+<div class="accordion-header" onclick="toggleAccordion(this.parentElement)">
+<span class="accordion-chevron">▶</span> Why Structure Matters
+</div>
+<div class="accordion-body">
+<div class="accordion-content">
+<p>The central idea: <strong>Atoms → Bonds → Shape → Polarity → IMFs → Physical Properties.</strong></p>
+<p>Every macroscopic property (boiling point, state, solubility) is determined by molecular structure. H₂O and CH₄ have similar mass (~18 g/mol vs ~16 g/mol), but their structures create a <strong>262°C gap</strong> in boiling points.</p>
+</div>
+</div>
+</div>
+
+<div class="accordion glass" style="border-left:4px solid #7C3AED" data-section="6">
+<div class="accordion-header" onclick="toggleAccordion(this.parentElement)">
+<span class="accordion-chevron">▶</span> Fun Facts & Mind-Blowers
+</div>
+<div class="accordion-body">
+<div class="accordion-content">
+<div class="fact-grid">
+<div class="fact-card" style="border-top:3px solid var(--coral)"><span class="fact-icon">🌡️</span>Without hydrogen bonds, water would boil at −40°C — colder than a Canadian winter.</div>
+<div class="fact-card" style="border-top:3px solid var(--methane)"><span class="fact-icon">🪐</span>Saturn's moon Titan has liquid methane lakes at −179°C. It rains methane there.</div>
+<div class="fact-card" style="border-top:3px solid var(--water)"><span class="fact-icon">🧊</span>Ice floats because hydrogen bonds create an open lattice less dense than liquid water.</div>
+<div class="fact-card" style="border-top:3px solid var(--purple)"><span class="fact-icon">📊</span>The boiling point gap between H₂O and CH₄ is 262°C — all because of molecular shape.</div>
+<div class="fact-card" style="border-top:3px solid #3B82F6"><span class="fact-icon">🔬</span>Your body is about 60% water by mass — roughly 42 liters for an average person.</div>
+<div class="fact-card" style="border-top:3px solid var(--error)"><span class="fact-icon">🌍</span>Methane traps 80× more heat than CO₂ over 20 years — making it a climate supervillain.</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Footer -->
+<footer id="footer">
+<div><strong>Chemistry Hub</strong> — The Molecule Showdown<br>Grade 10 Chemical Bonding RAFT Project</div>
+<div>Built for Ms. Eunice's Chemistry Class<br>© 2026</div>
+<div>References: OpenStax Chemistry 2e,<br>LibreTexts, NIST WebBook</div>
+</footer>
+</div>
+
+<script>
+// =============================================
+// GLOBALS
+// =============================================
+let animationsPaused = false;
+let moleculesBuilt = parseInt(sessionStorage.getItem('moleculesBuilt')||'0');
+const scenes = {};
+
+// =============================================
+// LOADING SCREEN
+// =============================================
+(function initLoading(){
+const text = "Chemistry Hub";
+const el = document.getElementById('loading-typed');
+let i = 0;
+function typeNext(){
+if(i < text.length){ el.textContent += text[i]; i++; setTimeout(typeNext, 80); }
+else {
+document.getElementById('loading-sub').style.opacity = '1';
+setTimeout(()=>{
+document.getElementById('loading-screen').classList.add('hidden');
+document.getElementById('app').classList.add('visible');
+initTabIndicator();
+init3DViewers();
+},800);
+}
+}
+typeNext();
+})();
+
+// =============================================
+// TAB SWITCHING
+// =============================================
+function switchTab(tabId, btn){
+document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+document.getElementById(tabId).classList.add('active');
+if(btn) btn.classList.add('active');
+updateTabIndicator(btn || document.querySelector(`.nav-tab[data-tab="${tabId}"]`));
+// Lazy init
+if(tabId === 'tab-3d' && !scenes.water) init3DViewers();
+if(tabId === 'tab-compare') animateCompareRows();
+if(tabId === 'tab-compare') initParticles();
+}
+
+function initTabIndicator(){
+const active = document.querySelector('.nav-tab.active');
+updateTabIndicator(active);
+}
+function updateTabIndicator(tab){
+const ind = document.getElementById('tab-indicator');
+if(!tab || !ind) return;
+const rect = tab.getBoundingClientRect();
+const parent = tab.parentElement.getBoundingClientRect();
+ind.style.left = (rect.left - parent.left) + 'px';
+ind.style.width = rect.width + 'px';
+}
+window.addEventListener('resize', ()=> updateTabIndicator(document.querySelector('.nav-tab.active')));
+
+// =============================================
+// 3D MOLECULE VIEWER
+// =============================================
+function init3DViewers(){
+if(scenes.water) return;
+createMoleculeScene('water');
+createMoleculeScene('methane');
+animate3D();
+}
+
+function createMoleculeScene(type){
+const container = document.getElementById(type+'-canvas');
+const w = container.clientWidth, h = container.clientHeight;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, w/h, 0.1, 100);
+camera.position.set(0, 0, 4.5);
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setSize(w, h);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+dir.position.set(3, 4, 5);
+scene.add(dir);
+const accent = type==='water' ? 0x00B4D8 : 0xF59E0B;
+const rim = new THREE.PointLight(accent, 0.3);
+rim.position.set(-2, -2, -3);
+scene.add(rim);
+const hemi = new THREE.HemisphereLight(0x1a1a2e, accent, 0.15);
+scene.add(hemi);
+
+const molGroup = new THREE.Group();
+scene.add(molGroup);
+
+const data = {scene, camera, renderer, molGroup, container, type,
+features:{lonePairs:false,bondDipoles:false,netDipole:false,labels:false,vibration:true,spin:true},
+interacting:false, lastInteract:0,
+rotX:0, rotY:0, dragStart:null, prevRot:{x:0,y:0},
+atoms:[], bonds:[], extras:{}
+};
+
+buildMolecule(data);
+setupOrbitControls(data);
+scenes[type] = data;
+
+const ro = new ResizeObserver(()=>{
+const nw=container.clientWidth, nh=container.clientHeight;
+if(nw>0 && nh>0){ camera.aspect=nw/nh; camera.updateProjectionMatrix(); renderer.setSize(nw,nh); }
+});
+ro.observe(container);
+}
+
+function makeSphere(color, radius, segments=32){
+const geo = new THREE.SphereGeometry(radius, segments, 24);
+const mat = new THREE.MeshStandardMaterial({color, roughness:0.3, metalness:0.1, emissive:color, emissiveIntensity:0.05});
+const mesh = new THREE.Mesh(geo, mat);
+// Glow
+const glowGeo = new THREE.SphereGeometry(radius*2, 16, 12);
+const glowMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.04});
+const glow = new THREE.Mesh(glowGeo, glowMat);
+mesh.add(glow);
+return mesh;
+}
+
+function makeBond(from, to){
+const dir = new THREE.Vector3().subVectors(to, from);
+const len = dir.length();
+const geo = new THREE.CylinderGeometry(0.08, 0.08, len, 12);
+const mat = new THREE.MeshStandardMaterial({color:0x7F8C8D, transparent:true, opacity:0.85});
+const mesh = new THREE.Mesh(geo, mat);
+const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
+mesh.position.copy(mid);
+const axis = new THREE.Vector3(0,1,0);
+const q = new THREE.Quaternion().setFromUnitVectors(axis, dir.normalize());
+mesh.setRotationFromQuaternion(q);
+return mesh;
+}
+
+function createSprite(text, color, size){
+const canvas = document.createElement('canvas');
+canvas.width = 128; canvas.height = 64;
+const ctx = canvas.getContext('2d');
+ctx.font = 'bold 36px sans-serif';
+ctx.fillStyle = color || '#ffffff';
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+ctx.fillText(text, 64, 32);
+const tex = new THREE.CanvasTexture(canvas);
+const mat = new THREE.SpriteMaterial({map:tex, transparent:true});
+const sprite = new THREE.Sprite(mat);
+sprite.scale.set(size||0.6, size*0.5||0.3, 1);
+return sprite;
+}
+
+function buildMolecule(data){
+const g = data.molGroup;
+const atoms = data.atoms = [];
+const bondMeshes = data.bonds = [];
+
+if(data.type === 'water'){
+// Oxygen at origin
+const O = makeSphere(0xE74C3C, 0.6);
+g.add(O); atoms.push({mesh:O, basePos:new THREE.Vector3(0,0,0), type:'O'});
+
+// Hydrogens
+const angle = 104.5 * Math.PI / 180;
+const halfA = angle/2;
+const bl = 1.0;
+const h1Pos = new THREE.Vector3(Math.sin(halfA)*bl, Math.cos(halfA)*bl, 0);
+const h2Pos = new THREE.Vector3(-Math.sin(halfA)*bl, Math.cos(halfA)*bl, 0);
+const H1 = makeSphere(0xECF0F1, 0.31);
+H1.position.copy(h1Pos); g.add(H1); atoms.push({mesh:H1, basePos:h1Pos.clone(), type:'H'});
+const H2 = makeSphere(0xECF0F1, 0.31);
+H2.position.copy(h2Pos); g.add(H2); atoms.push({mesh:H2, basePos:h2Pos.clone(), type:'H'});
+
+// Bonds
+const b1 = makeBond(new THREE.Vector3(0,0,0), h1Pos);
+const b2 = makeBond(new THREE.Vector3(0,0,0), h2Pos);
+g.add(b1); g.add(b2); bondMeshes.push(b1, b2);
+
+// Center of mass offset
+const com = new THREE.Vector3().add(h1Pos).add(h2Pos).multiplyScalar(1/3*16/(16+1+1));
+// Roughly center it
+g.position.sub(com);
+
+// Lone pairs (hidden by default)
+const lp1 = makeSphere(0x3B82F6, 0.3);
+lp1.scale.set(0.4, 0.7, 0.4);
+lp1.material.transparent = true; lp1.material.opacity = 0.2;
+lp1.material.emissive = new THREE.Color(0x3B82F6); lp1.material.emissiveIntensity = 0.1;
+const lpAngle1 = Math.PI - halfA;
+lp1.position.set(Math.sin(lpAngle1)*0.7, -Math.cos(lpAngle1)*0.7, 0.4);
+lp1.visible = false; g.add(lp1);
+const lp2 = lp1.clone();
+lp2.position.set(-Math.sin(lpAngle1)*0.7, -Math.cos(lpAngle1)*0.7, -0.4);
+lp2.visible = false; g.add(lp2);
+data.extras.lonePairs = [lp1, lp2];
+
+// Bond dipole arrows
+const arrowDir1 = new THREE.Vector3().subVectors(new THREE.Vector3(0,0,0), h1Pos).normalize();
+const arrowDir2 = new THREE.Vector3().subVectors(new THREE.Vector3(0,0,0), h2Pos).normalize();
+const mid1 = h1Pos.clone().add(new THREE.Vector3(0,0,0)).multiplyScalar(0.5);
+const mid2 = h2Pos.clone().add(new THREE.Vector3(0,0,0)).multiplyScalar(0.5);
+const arrow1 = new THREE.ArrowHelper(arrowDir1, mid1, 0.5, 0x3B82F6, 0.15, 0.1);
+const arrow2 = new THREE.ArrowHelper(arrowDir2, mid2, 0.5, 0x3B82F6, 0.15, 0.1);
+arrow1.visible = false; arrow2.visible = false;
+g.add(arrow1); g.add(arrow2);
+data.extras.bondDipoles = [arrow1, arrow2];
+
+// Net dipole
+const netDir = new THREE.Vector3(0, 1, 0).normalize();
+const netOrigin = new THREE.Vector3(0, -0.3, 0);
+const netArrow = new THREE.ArrowHelper(netDir, netOrigin, 1.2, 0x8B5CF6, 0.2, 0.12);
+netArrow.visible = false; g.add(netArrow);
+data.extras.netDipole = netArrow;
+
+// Labels
+const oLabel = createSprite('O (δ⁻)', '#3B82F6', 0.5);
+oLabel.position.set(0, 0.7, 0); oLabel.visible = false; g.add(oLabel);
+const h1Label = createSprite('H (δ⁺)', '#EF4444', 0.4);
+h1Label.position.copy(h1Pos).add(new THREE.Vector3(0, 0.4, 0)); h1Label.visible = false; g.add(h1Label);
+const h2Label = createSprite('H (δ⁺)', '#EF4444', 0.4);
+h2Label.position.copy(h2Pos).add(new THREE.Vector3(0, 0.4, 0)); h2Label.visible = false; g.add(h2Label);
+const angleLabel = createSprite('104.5°', '#ffffff', 0.5);
+angleLabel.position.set(0, 0.9, 0); angleLabel.visible = false; g.add(angleLabel);
+data.extras.labels = [oLabel, h1Label, h2Label, angleLabel];
+
+} else { // methane
+const C = makeSphere(0x2C3E50, 0.55);
+g.add(C); atoms.push({mesh:C, basePos:new THREE.Vector3(0,0,0), type:'C'});
+
+const bl = 1.1;
+const tetraPositions = [
+new THREE.Vector3(1,1,1).normalize().multiplyScalar(bl),
+new THREE.Vector3(1,-1,-1).normalize().multiplyScalar(bl),
+new THREE.Vector3(-1,1,-1).normalize().multiplyScalar(bl),
+new THREE.Vector3(-1,-1,1).normalize().multiplyScalar(bl),
+];
+tetraPositions.forEach(pos=>{
+const H = makeSphere(0xECF0F1, 0.31);
+H.position.copy(pos); g.add(H);
+atoms.push({mesh:H, basePos:pos.clone(), type:'H'});
+const bond = makeBond(new THREE.Vector3(0,0,0), pos);
+g.add(bond); bondMeshes.push(bond);
+});
+
+// Bond dipoles (tiny arrows)
+data.extras.bondDipoles = [];
+tetraPositions.forEach(pos=>{
+const dir = pos.clone().normalize().negate(); // toward C
+const mid = pos.clone().multiplyScalar(0.5);
+const arrow = new THREE.ArrowHelper(dir, mid, 0.25, 0x3B82F6, 0.08, 0.06);
+arrow.visible = false; g.add(arrow);
+data.extras.bondDipoles.push(arrow);
+});
+
+// Net dipole - label showing = 0
+const netLabel = createSprite('Net Dipole = 0', '#8B5CF6', 0.8);
+netLabel.position.set(0, -1.5, 0); netLabel.visible = false; g.add(netLabel);
+data.extras.netDipole = netLabel;
+
+// Labels
+const cLabel = createSprite('C (δ⁻)', '#94A3B8', 0.5);
+cLabel.position.set(0, 0.7, 0); cLabel.visible = false; g.add(cLabel);
+const hLabels = tetraPositions.map(pos=>{
+const l = createSprite('H (δ⁺)', '#94A3B8', 0.35);
+l.position.copy(pos).add(pos.clone().normalize().multiplyScalar(0.4));
+l.visible = false; g.add(l);
+return l;
+});
+const aLabel = createSprite('109.5°', '#ffffff', 0.5);
+aLabel.position.set(0, -1.0, 0); aLabel.visible = false; g.add(aLabel);
+data.extras.labels = [cLabel, ...hLabels, aLabel];
+}
+}
+
+function setupOrbitControls(data){
+const el = data.renderer.domElement;
+let isDragging = false;
+el.addEventListener('mousedown', e=>{
+isDragging = true;
+data.interacting = true;
+data.dragStart = {x:e.clientX, y:e.clientY};
+data.prevRot = {x:data.rotX, y:data.rotY};
+});
+window.addEventListener('mousemove', e=>{
+if(!isDragging || !data.dragStart) return;
+const dx = e.clientX - data.dragStart.x;
+const dy = e.clientY - data.dragStart.y;
+data.rotY = data.prevRot.y + dx * 0.01;
+data.rotX = data.prevRot.x + dy * 0.01;
+data.molGroup.rotation.set(data.rotX, data.rotY, 0);
+});
+window.addEventListener('mouseup', ()=>{
+isDragging = false;
+data.lastInteract = performance.now();
+setTimeout(()=>{ if(performance.now() - data.lastInteract > 2900) data.interacting = false; }, 3100);
+});
+el.addEventListener('wheel', e=>{
+e.preventDefault();
+data.camera.position.z = Math.max(2.5, Math.min(8, data.camera.position.z + e.deltaY*0.005));
+data.interacting = true;
+data.lastInteract = performance.now();
+setTimeout(()=>{ if(performance.now() - data.lastInteract > 2900) data.interacting = false; }, 3100);
+}, {passive:false});
+// Touch support
+el.addEventListener('touchstart', e=>{
+if(e.touches.length===1){
+isDragging = true;
+data.interacting = true;
+data.dragStart = {x:e.touches[0].clientX, y:e.touches[0].clientY};
+data.prevRot = {x:data.rotX, y:data.rotY};
+}
+}, {passive:true});
+el.addEventListener('touchmove', e=>{
+if(!isDragging || !data.dragStart || e.touches.length!==1) return;
+const dx = e.touches[0].clientX - data.dragStart.x;
+const dy = e.touches[0].clientY - data.dragStart.y;
+data.rotY = data.prevRot.y + dx * 0.01;
+data.rotX = data.prevRot.x + dy * 0.01;
+data.molGroup.rotation.set(data.rotX, data.rotY, 0);
+}, {passive:true});
+el.addEventListener('touchend', ()=>{
+isDragging = false;
+data.lastInteract = performance.now();
+setTimeout(()=>{ if(performance.now() - data.lastInteract > 2900) data.interacting = false; }, 3100);
+});
+}
+
+function toggleFeature(molType, feature, el){
+const data = scenes[molType];
+if(!data) return;
+const isOn = el.classList.toggle('on');
+data.features[feature] = isOn;
+if(feature === 'lonePairs' && data.extras.lonePairs){
+data.extras.lonePairs.forEach(lp => lp.visible = isOn);
+}
+if(feature === 'bondDipoles' && data.extras.bondDipoles){
+data.extras.bondDipoles.forEach(a => a.visible = isOn);
+}
+if(feature === 'netDipole' && data.extras.netDipole){
+if(data.extras.netDipole.visible !== undefined) data.extras.netDipole.visible = isOn;
+}
+if(feature === 'labels' && data.extras.labels){
+data.extras.labels.forEach(l => l.visible = isOn);
+}
+}
+
+function animate3D(){
+requestAnimationFrame(animate3D);
+if(animationsPaused) return;
+const t = performance.now() * 0.001;
+['water','methane'].forEach(type=>{
+const data = scenes[type];
+if(!data) return;
+// Auto-rotate
+if(data.features.spin && !data.interacting){
+data.rotY += 0.003;
+data.molGroup.rotation.y = data.rotY;
+}
+// Vibration
+if(data.features.vibration){
+data.atoms.forEach((a, i)=>{
+const freq = 1.5 + i*0.3;
+const phase = i * 1.7;
+a.mesh.position.set(
+a.basePos.x + Math.sin(t*freq+phase)*0.02,
+a.basePos.y + Math.sin(t*freq*1.3+phase+1)*0.02,
+a.basePos.z + Math.sin(t*freq*0.7+phase+2)*0.02
+);
+});
+}
+data.renderer.render(data.scene, data.camera);
+});
+}
+
+// =============================================
+// BUILD LAB
+// =============================================
+let buildTarget = 'H2O';
+let placedAtoms = [];
+let buildBonds = [];
+let buildHistory = [];
+const maxBonds = {O:2, H:1, C:4};
+const atomColors = {O:'#E74C3C', H:'#ECF0F1', C:'#2C3E50'};
+const atomSizes = {O:52, H:38, C:48};
+const atomTextColors = {O:'#fff', H:'#2C3E50', C:'#fff'};
+
+function selectTarget(target){
+buildTarget = target;
+document.querySelectorAll('.target-card').forEach(c => c.classList.remove('selected'));
+document.querySelector(target==='H2O'?'.water-target':'.methane-target').classList.add('selected');
+resetBuild(true);
+}
+
+document.getElementById('build-counter').textContent = `Molecules built: ${moleculesBuilt}`;
+
+// Drag and drop from palette
+document.querySelectorAll('.atom-chip').forEach(chip=>{
+chip.addEventListener('dragstart', e=>{
+e.dataTransfer.setData('atom', chip.dataset.atom);
+});
+});
+
+const buildCanvas = document.getElementById('build-canvas');
+buildCanvas.addEventListener('dragover', e=>{ e.preventDefault(); buildCanvas.classList.add('drag-over'); });
+buildCanvas.addEventListener('dragleave', ()=> buildCanvas.classList.remove('drag-over'));
+buildCanvas.addEventListener('drop', e=>{
+e.preventDefault();
+buildCanvas.classList.remove('drag-over');
+const atomType = e.dataTransfer.getData('atom');
+if(!atomType) return;
+const rect = buildCanvas.getBoundingClientRect();
+const x = e.clientX - rect.left;
+const y = e.clientY - rect.top;
+placeAtom(atomType, x, y);
+});
+
+function placeAtom(type, x, y){
+const id = Date.now() + Math.random();
+const atom = {id, type, x, y, bonds:0, maxBonds:maxBonds[type], el:null, bondEls:[]};
+
+// Create DOM element
+const el = document.createElement('div');
+el.className = 'canvas-atom';
+el.style.left = x+'px';
+el.style.top = y+'px';
+el.style.width = atomSizes[type]+'px';
+el.style.height = atomSizes[type]+'px';
+el.style.background = atomColors[type];
+el.style.color = atomTextColors[type];
+el.style.fontSize = type==='H'?'14px':'18px';
+el.style.fontWeight = '700';
+el.textContent = type;
+el.style.boxShadow = `0 0 12px ${atomColors[type]}44`;
+el.dataset.id = id;
+
+// Make draggable on canvas
+let dragging = false, offsetX, offsetY;
+el.addEventListener('mousedown', e2=>{
+dragging = true;
+offsetX = e2.clientX - atom.x;
+offsetY = e2.clientY - atom.y;
+el.style.zIndex = 10;
+e2.stopPropagation();
+});
+window.addEventListener('mousemove', e2=>{
+if(!dragging) return;
+atom.x = e2.clientX - offsetX;
+atom.y = e2.clientY - offsetY;
+el.style.left = atom.x+'px';
+el.style.top = atom.y+'px';
+updateBondLines();
+// Check trash zone
+const trashRect = document.getElementById('trash-zone').getBoundingClientRect();
+const isOverTrash = e2.clientX > trashRect.left && e2.clientX < trashRect.right && e2.clientY > trashRect.top && e2.clientY < trashRect.bottom;
+document.getElementById('trash-zone').classList.toggle('active', isOverTrash);
+});
+window.addEventListener('mouseup', e2=>{
+if(!dragging) return;
+dragging = false;
+el.style.zIndex = 2;
+document.getElementById('trash-zone').classList.remove('active');
+// Check trash
+const trashRect = document.getElementById('trash-zone').getBoundingClientRect();
+const isOverTrash = e2.clientX > trashRect.left && e2.clientX < trashRect.right && e2.clientY > trashRect.top && e2.clientY < trashRect.bottom;
+if(isOverTrash){ removeAtom(atom); return; }
+// Try to bond with nearby atoms
+tryBond(atom);
+});
+
+buildCanvas.appendChild(el);
+atom.el = el;
+placedAtoms.push(atom);
+buildHistory.push({action:'add', atom});
+updateBuildInfo();
+// Add bond dots
+updateBondDots(atom);
+}
+
+function tryBond(atom){
+placedAtoms.forEach(other=>{
+if(other.id === atom.id) return;
+const dx = atom.x - other.x, dy = atom.y - other.y;
+const dist = Math.sqrt(dx*dx + dy*dy);
+if(dist < 80 && atom.bonds < atom.maxBonds && other.bonds < other.maxBonds){
+// Check not already bonded
+const alreadyBonded = buildBonds.some(b=>(b.a===atom.id&&b.b===other.id)||(b.a===other.id&&b.b===atom.id));
+if(alreadyBonded) return;
+// Form bond
+atom.bonds++;
+other.bonds++;
+const bondId = atom.id + '-' + other.id;
+// Snap atom closer
+const angle = Math.atan2(atom.y-other.y, atom.x-other.x);
+const snapDist = 65;
+atom.x = other.x + Math.cos(angle)*snapDist;
+atom.y = other.y + Math.sin(angle)*snapDist;
+atom.el.style.left = atom.x+'px';
+atom.el.style.top = atom.y+'px';
+// Draw bond line
+const line = document.createElement('div');
+line.className = 'canvas-bond';
+line.dataset.bond = bondId;
+buildCanvas.appendChild(line);
+positionBondLine(line, atom, other);
+buildBonds.push({a:atom.id, b:other.id, el:line});
+buildHistory.push({action:'bond', a:atom.id, b:other.id});
+// Flash effect
+atom.el.style.boxShadow = `0 0 25px #fff`;
+setTimeout(()=> atom.el.style.boxShadow = `0 0 12px ${atomColors[atom.type]}44`, 300);
+updateBondDots(atom);
+updateBondDots(other);
+updateBuildInfo();
+checkCompletion();
+} else if(dist < 80 && (atom.bonds >= atom.maxBonds || other.bonds >= other.maxBonds)){
+// Reject
+const full = atom.bonds >= atom.maxBonds ? atom : other;
+atom.el.style.boxShadow = `0 0 20px ${atomColors[full.type]}`;
+const angle = Math.atan2(atom.y-other.y, atom.x-other.x);
+atom.x += Math.cos(angle)*30;
+atom.y += Math.sin(angle)*30;
+atom.el.style.left = atom.x+'px';
+atom.el.style.top = atom.y+'px';
+setTimeout(()=> atom.el.style.boxShadow = `0 0 12px ${atomColors[atom.type]}44`, 500);
+}
+});
+}
+
+function positionBondLine(line, a, b){
+const dx = b.x - a.x, dy = b.y - a.y;
+const dist = Math.sqrt(dx*dx+dy*dy);
+const angle = Math.atan2(dy, dx) * 180/Math.PI;
+line.style.width = dist+'px';
+line.style.height = '4px';
+line.style.background = 'rgba(127,140,141,0.8)';
+line.style.borderRadius = '2px';
+line.style.left = a.x+'px';
+line.style.top = (a.y-2)+'px';
+line.style.transformOrigin = '0 50%';
+line.style.transform = `rotate(${angle}deg)`;
+}
+
+function updateBondLines(){
+buildBonds.forEach(bond=>{
+const a = placedAtoms.find(at=>at.id===bond.a);
+const b = placedAtoms.find(at=>at.id===bond.b);
+if(a && b) positionBondLine(bond.el, a, b);
+});
+}
+
+function updateBondDots(atom){
+// Remove old dots
+atom.el.querySelectorAll('.bond-dot').forEach(d=>d.remove());
+const remaining = atom.maxBonds - atom.bonds;
+for(let i=0;i<remaining;i++){
+const dot = document.createElement('div');
+dot.className = 'bond-dot';
+const angle = (i/remaining)*Math.PI*2 - Math.PI/2;
+const r = atomSizes[atom.type]/2 + 6;
+dot.style.left = (atomSizes[atom.type]/2 + Math.cos(angle)*r - 4)+'px';
+dot.style.top = (atomSizes[atom.type]/2 + Math.sin(angle)*r - 4)+'px';
+atom.el.appendChild(dot);
+}
+}
+
+function removeAtom(atom){
+// Remove bonds
+buildBonds = buildBonds.filter(b=>{
+if(b.a===atom.id||b.b===atom.id){
+b.el.remove();
+const other = placedAtoms.find(a=>a.id===(b.a===atom.id?b.b:b.a));
+if(other){other.bonds--;updateBondDots(other);}
+return false;
+}
+return true;
+});
+atom.el.remove();
+placedAtoms = placedAtoms.filter(a=>a.id!==atom.id);
+updateBuildInfo();
+}
+
+function undoBuild(){
+if(buildHistory.length===0) return;
+const last = buildHistory.pop();
+if(last.action === 'bond'){
+const bond = buildBonds.find(b=>b.a===last.a&&b.b===last.b);
+if(bond){
+bond.el.remove();
+buildBonds = buildBonds.filter(b=>b!==bond);
+const a = placedAtoms.find(at=>at.id===last.a);
+const b = placedAtoms.find(at=>at.id===last.b);
+if(a){a.bonds--;updateBondDots(a);}
+if(b){b.bonds--;updateBondDots(b);}
+}
+} else if(last.action === 'add'){
+removeAtom(last.atom);
+}
+updateBuildInfo();
+}
+
+function resetBuild(silent){
+if(!silent && placedAtoms.length > 0 && !confirm('Clear all atoms?')) return;
+placedAtoms.forEach(a=>a.el.remove());
+buildBonds.forEach(b=>b.el.remove());
+placedAtoms = []; buildBonds = []; buildHistory = [];
+document.getElementById('build-info-content').innerHTML = getDefaultInfoHTML();
+updateBuildInfo();
+}
+
+function getDefaultInfoHTML(){
+const t = buildTarget;
+const color = t==='H2O'?'var(--water)':'var(--methane)';
+const name = t==='H2O'?'H₂O':'CH₄';
+const total = t==='H2O'?3:5;
+const bonds = t==='H2O'?2:4;
+return `
+<p style="color:var(--text-muted);font-size:14px;margin-top:8px">Target: <strong style="color:${color}">${name}</strong></p>
+<div class="progress-bar"><div class="progress-fill ${t==='H2O'?'water-fill':'methane-fill'}" id="build-progress" style="width:0%"></div></div>
+<p style="font-size:13px;color:var(--text-muted)">Atoms: <span id="atom-count">0</span> / <span id="atom-total">${total}</span></p>
+<p style="font-size:13px;color:var(--text-muted)">Bonds: <span id="bond-count">0</span> / <span id="bond-total">${bonds}</span></p>
+<div id="atom-statuses"></div>
+<div class="hint-box" id="build-hint">Start by placing the central atom!</div>`;
+}
+
+function updateBuildInfo(){
+const atomCount = document.getElementById('atom-count');
+const bondCount = document.getElementById('bond-count');
+const progress = document.getElementById('build-progress');
+const hint = document.getElementById('build-hint');
+if(!atomCount) return;
+const totalAtoms = buildTarget==='H2O'?3:5;
+const totalBonds = buildTarget==='H2O'?2:4;
+atomCount.textContent = placedAtoms.length;
+bondCount.textContent = buildBonds.length;
+const pct = ((placedAtoms.length/totalAtoms + buildBonds.length/totalBonds)/2*100);
+progress.style.width = Math.min(100, pct)+'%';
+
+// Update hints
+if(!hint) return;
+if(placedAtoms.length === 0) hint.textContent = 'Start by placing the central atom!';
+else if(buildTarget==='H2O'){
+const hasO = placedAtoms.some(a=>a.type==='O');
+const hasC = placedAtoms.some(a=>a.type==='C');
+if(hasC) hint.textContent = "Hmm, H₂O doesn't contain carbon. Try oxygen or hydrogen!";
+else if(!hasO) hint.textContent = 'Add an oxygen atom — it\'s the central atom of water!';
+else if(placedAtoms.length < 3) hint.textContent = 'Now add hydrogen atoms nearby to form bonds.';
+else if(buildBonds.length < 2) hint.textContent = 'Drag atoms close together to form bonds!';
+} else {
+const hasC = placedAtoms.some(a=>a.type==='C');
+const hasO = placedAtoms.some(a=>a.type==='O');
+if(hasO) hint.textContent = "Hmm, CH₄ doesn't contain oxygen. Try carbon or hydrogen!";
+else if(!hasC) hint.textContent = 'Add a carbon atom — it\'s the central atom of methane!';
+else if(placedAtoms.length < 5) hint.textContent = `Add ${5-placedAtoms.length} more hydrogen atom${5-placedAtoms.length>1?'s':''}!`;
+else if(buildBonds.length < 4) hint.textContent = 'Drag atoms close together to form bonds!';
+}
+
+// Atom statuses
+const statuses = document.getElementById('atom-statuses');
+if(statuses){
+statuses.innerHTML = '';
+placedAtoms.forEach(a=>{
+const div = document.createElement('div');
+div.className = 'atom-status';
+div.innerHTML = `<strong>${a.type}</strong> — Bonds: ${a.bonds}/${a.maxBonds}`;
+const dots = document.createElement('div');
+dots.className = 'atom-status-dots';
+for(let i=0;i<a.maxBonds;i++){
+const d = document.createElement('div');
+d.className = 'atom-status-dot' + (i<a.bonds?' filled':'');
+dots.appendChild(d);
+}
+div.appendChild(dots);
+statuses.appendChild(div);
+});
+}
+}
+
+function checkCompletion(){
+if(buildTarget==='H2O'){
+const oxygens = placedAtoms.filter(a=>a.type==='O');
+const hydrogens = placedAtoms.filter(a=>a.type==='H');
+if(oxygens.length===1 && hydrogens.length===2 && placedAtoms.length===3 && buildBonds.length===2){
+celebrateCompletion('Water — H₂O', {
+eGeom:'Tetrahedral', mGeom:'Bent', angle:'104.5°', polarity:'POLAR',
+imf:'Hydrogen Bonding', bp:'100 °C',
+fact:'Without hydrogen bonds, water would boil at −40°C!'
+});
+}
+} else {
+const carbons = placedAtoms.filter(a=>a.type==='C');
+const hydrogens = placedAtoms.filter(a=>a.type==='H');
+if(carbons.length===1 && hydrogens.length===4 && placedAtoms.length===5 && buildBonds.length===4){
+celebrateCompletion('Methane — CH₄', {
+eGeom:'Tetrahedral', mGeom:'Tetrahedral', angle:'109.5°', polarity:'NON-POLAR',
+imf:'London Dispersion Forces', bp:'−162 °C',
+fact:"Saturn's moon Titan has liquid methane lakes at −179°C!"
+});
+}
+}
+}
+
+function celebrateCompletion(name, props){
+moleculesBuilt++;
+sessionStorage.setItem('moleculesBuilt', moleculesBuilt);
+document.getElementById('build-counter').textContent = `Molecules built: ${moleculesBuilt}`;
+
+// Confetti
+const rect = buildCanvas.getBoundingClientRect();
+for(let i=0;i<60;i++){
+const c = document.createElement('div');
+c.className = 'confetti';
+c.style.background = ['#00B4D8','#F59E0B','#10B981','#7C3AED','#EF4444','#EC4899'][Math.floor(Math.random()*6)];
+c.style.left = (rect.width/2)+'px';
+c.style.top = (rect.height/2)+'px';
+c.style.width = (4+Math.random()*6)+'px';
+c.style.height = (4+Math.random()*6)+'px';
+c.style.borderRadius = Math.random()>0.5?'50%':'2px';
+buildCanvas.appendChild(c);
+const angle = Math.random()*Math.PI*2;
+const vel = 3+Math.random()*5;
+const vx = Math.cos(angle)*vel, vy = Math.sin(angle)*vel;
+let cx=rect.width/2, cy=rect.height/2, o=1, frame=0;
+function animC(){
+cx+=vx; cy+=vy+frame*0.15; o-=0.015; frame++;
+c.style.left=cx+'px'; c.style.top=cy+'px'; c.style.opacity=o;
+if(o>0) requestAnimationFrame(animC); else c.remove();
+}
+requestAnimationFrame(animC);
+}
+
+// Glow atoms
+placedAtoms.forEach(a=>{
+a.el.style.boxShadow = `0 0 30px ${buildTarget==='H2O'?'var(--water)':'var(--methane)'}`;
+});
+
+// Update info panel
+const info = document.getElementById('build-info-content');
+info.innerHTML = `
+<div class="completion-card">
+<h3>✅ ${name}</h3>
+<div style="margin-top:12px" class="props-grid">
+<span class="prop-label">E⁻ Geometry</span><span class="prop-value">${props.eGeom}</span>
+<span class="prop-label">Mol. Geometry</span><span class="prop-value">${props.mGeom}</span>
+<span class="prop-label">Bond Angle</span><span class="prop-value">${props.angle}</span>
+<span class="prop-label">Polarity</span><span class="prop-value"><span class="polar-badge ${props.polarity==='POLAR'?'polar':'nonpolar'}">${props.polarity}</span></span>
+<span class="prop-label">IMF</span><span class="prop-value">${props.imf}</span>
+<span class="prop-label">Boiling Point</span><span class="prop-value">${props.bp}</span>
+</div>
+<div class="fun-fact" style="margin-top:16px">💡 <strong>Fun Fact:</strong> ${props.fact}</div>
+<button class="btn btn-outline" style="margin-top:16px;width:100%;justify-content:center" onclick="resetBuild(true)">🔄 Build Again</button>
+</div>`;
+}
+
+// =============================================
+// COMPARE: Table Animation
+// =============================================
+let compareAnimated = false;
+function animateCompareRows(){
+if(compareAnimated) return;
+compareAnimated = true;
+document.querySelectorAll('.compare-row').forEach((row, i)=>{
+setTimeout(()=> row.classList.add('visible'), 200 + i*150);
+});
+}
+
+// =============================================
+// COMPARE: Temperature & Particles
+// =============================================
+let currentTemp = 25;
+let particlesInited = false;
+let waterParticles = [], methaneParticles = [];
+
+function initParticles(){
+if(particlesInited) return;
+particlesInited = true;
+const wBox = document.getElementById('water-particles');
+const mBox = document.getElementById('methane-particles');
+for(let i=0;i<20;i++){
+waterParticles.push(createParticle(wBox, 'var(--water)', i));
+methaneParticles.push(createParticle(mBox, 'var(--methane)', i));
+}
+initThermometer();
+updateParticleStates();
+animateParticles();
+}
+
+function createParticle(container, color, idx){
+const el = document.createElement('div');
+el.className = 'particle';
+el.style.width = '10px';
+el.style.height = '10px';
+el.style.background = color;
+el.style.boxShadow = `0 0 6px ${color}`;
+const x = 30 + Math.random()*(container.clientWidth - 60);
+const y = 30 + Math.random()*(container.clientHeight - 80);
+el.style.left = x+'px'; el.style.top = y+'px';
+container.appendChild(el);
+return {el, x, y, vx:(Math.random()-0.5)*2, vy:(Math.random()-0.5)*2, baseX:x, baseY:y, idx};
+}
+
+function getState(temp, molecule){
+if(molecule==='water'){
+if(temp < 0) return 'solid';
+if(temp < 100) return 'liquid';
+return 'gas';
+} else {
+if(temp < -182) return 'solid';
+if(temp < -162) return 'liquid';
+return 'gas';
+}
+}
+
+function updateParticleStates(){
+const ws = getState(currentTemp, 'water');
+const ms = getState(currentTemp, 'methane');
+const labels = {solid:'SOLID ❄️', liquid:'LIQUID 💧', gas:'GAS 💨'};
+document.getElementById('water-state').textContent = labels[ws];
+document.getElementById('methane-state').textContent = labels[ms];
+}
+
+function animateParticles(){
+requestAnimationFrame(animateParticles);
+if(animationsPaused) return;
+const ws = getState(currentTemp, 'water');
+const ms = getState(currentTemp, 'methane');
+moveParticles(waterParticles, ws, document.getElementById('water-particles'));
+moveParticles(methaneParticles, ms, document.getElementById('methane-particles'));
+}
+
+function moveParticles(particles, state, container){
+const w = container.clientWidth - 14;
+const h = container.clientHeight - 14;
+particles.forEach((p, i)=>{
+if(state==='solid'){
+// Grid arrangement with tiny vibration
+const cols = 5, rows = 4;
+const gx = 40 + (i%cols)*(w-80)/cols;
+const gy = 60 + Math.floor(i/cols)*(h-120)/rows;
+p.x += (gx + Math.sin(performance.now()*0.003+i)*1.5 - p.x)*0.05;
+p.y += (gy + Math.cos(performance.now()*0.004+i)*1.5 - p.y)*0.05;
+p.vx = 0; p.vy = 0;
+} else if(state==='liquid'){
+const speed = 0.5;
+p.vx += (Math.random()-0.5)*0.3; p.vy += (Math.random()-0.5)*0.3 + 0.02;
+p.vx *= 0.98; p.vy *= 0.98;
+const maxV = speed;
+p.vx = Math.max(-maxV, Math.min(maxV, p.vx));
+p.vy = Math.max(-maxV, Math.min(maxV, p.vy));
+p.x += p.vx; p.y += p.vy;
+// Keep in bottom 65%
+if(p.y < h*0.35) p.vy = Math.abs(p.vy)*0.5;
+} else { // gas
+const speed = 2;
+p.vx += (Math.random()-0.5)*0.5;
+p.vy += (Math.random()-0.5)*0.5;
+p.vx *= 0.99; p.vy *= 0.99;
+const maxV = speed;
+p.vx = Math.max(-maxV, Math.min(maxV, p.vx));
+p.vy = Math.max(-maxV, Math.min(maxV, p.vy));
+p.x += p.vx; p.y += p.vy;
+}
+// Bounce off walls
+if(p.x < 10){p.x=10;p.vx*=-0.8;}
+if(p.x > w){p.x=w;p.vx*=-0.8;}
+if(p.y < 40){p.y=40;p.vy*=-0.8;}
+if(p.y > h){p.y=h;p.vy*=-0.8;}
+p.el.style.left=p.x+'px';
+p.el.style.top=p.y+'px';
+});
+}
+
+// Thermometer
+function initThermometer(){
+const thermo = document.getElementById('thermometer');
+const handle = document.getElementById('thermo-handle');
+const fill = document.getElementById('thermo-fill');
+const tempDisplay = document.getElementById('thermo-temp-display');
+const funLabel = document.getElementById('thermo-fun-label');
+const thermoH = thermo.clientHeight;
+// Range: -200 to 150
+const minT=-200, maxT=150;
+let dragging = false;
+
+function tempToY(t){ return thermoH - ((t - minT)/(maxT - minT))*thermoH; }
+function yToTemp(y){ return maxT - (y/thermoH)*(maxT - minT); }
+
+function setTemp(t){
+currentTemp = Math.round(Math.max(minT, Math.min(maxT, t)));
+const y = tempToY(currentTemp);
+handle.style.top = (y-12)+'px';
+const fillH = thermoH - y;
+fill.style.height = fillH+'px';
+// Color gradient
+const ratio = (currentTemp - minT)/(maxT - minT);
+if(ratio < 0.4) fill.style.background = `hsl(${200+ratio*60}, 70%, ${30+ratio*30}%)`;
+else if(ratio < 0.7) fill.style.background = `hsl(0, 0%, ${60+ratio*20}%)`;
+else fill.style.background = `hsl(${20-ratio*10}, ${60+ratio*30}%, ${45+ratio*10}%)`;
+tempDisplay.textContent = currentTemp + ' °C';
+tempDisplay.style.top = (y-12)+'px';
+funLabel.style.top = (y+14)+'px';
+// Fun labels
+const funLabels = {'-179':'☄️ Titan\'s methane lakes!','-162':'💨 Methane boils here','0':'🧊 Water freezes/melts','25':'🌡️ Room temperature','37':'🧬 Body temperature','100':'💧 Water boils here'};
+let closest = '', minDist = 999;
+Object.keys(funLabels).forEach(k=>{
+const d = Math.abs(currentTemp - parseInt(k));
+if(d < minDist && d < 8){minDist=d; closest=k;}
+});
+funLabel.textContent = closest ? funLabels[closest] : '';
+updateParticleStates();
+}
+
+handle.addEventListener('mousedown', e=>{ dragging=true; e.preventDefault(); });
+window.addEventListener('mousemove', e=>{
+if(!dragging) return;
+const rect = thermo.getBoundingClientRect();
+const y = Math.max(0, Math.min(thermoH, e.clientY - rect.top));
+setTemp(yToTemp(y));
+});
+window.addEventListener('mouseup', ()=> dragging=false);
+// Touch
+handle.addEventListener('touchstart', e=>{ dragging=true; e.preventDefault(); });
+window.addEventListener('touchmove', e=>{
+if(!dragging) return;
+const rect = thermo.getBoundingClientRect();
+const y = Math.max(0, Math.min(thermoH, e.touches[0].clientY - rect.top));
+setTemp(yToTemp(y));
+});
+window.addEventListener('touchend', ()=> dragging=false);
+
+setTemp(25);
+}
+
+// =============================================
+// LEARN: Accordions
+// =============================================
+function toggleAccordion(el){
+const wasOpen = el.classList.contains('open');
+document.querySelectorAll('.accordion').forEach(a=>a.classList.remove('open'));
+if(!wasOpen){
+el.classList.add('open');
+// Animate IMF bars if section 4
+if(el.dataset.section==='4'){
+setTimeout(()=>{
+const ldf = document.getElementById('imf-bar-ldf');
+const hb = document.getElementById('imf-bar-hb');
+if(ldf) ldf.style.width = '18%';
+if(hb) hb.style.width = '85%';
+}, 100);
+}
+}
+}
+
+// =============================================
+// KEYBOARD SHORTCUTS
+// =============================================
+document.addEventListener('keydown', e=>{
+if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+const tabs = ['tab-3d','tab-build','tab-compare','tab-learn'];
+if(e.key>='1' && e.key<='4'){
+const idx = parseInt(e.key)-1;
+switchTab(tabs[idx], document.querySelectorAll('.nav-tab')[idx]);
+}
+if(e.key===' '){
+e.preventDefault();
+animationsPaused = !animationsPaused;
+}
+if(e.key.toLowerCase()==='r' && document.getElementById('tab-build').classList.contains('active')){
+resetBuild(true);
+}
+});
+
+// =============================================
+// SCROLL-TRIGGERED ANIMATIONS
+// =============================================
+const observer = new IntersectionObserver(entries=>{
+entries.forEach(entry=>{
+if(entry.isIntersecting){
+entry.target.classList.add('visible');
+}
+});
+}, {threshold:0.1});
+document.querySelectorAll('.compare-row, .flow-node').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
